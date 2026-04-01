@@ -405,7 +405,20 @@ export class Storage {
     return path.join(this.getExtensionsDir(), 'gemini-extension.json');
   }
 
-  getHistoryFilePath(): string {
+  getShellHistoryPath(): string {
     return path.join(this.getProjectTempDir(), 'shell_history');
+  }
+
+  /**
+   * Returns the directory used for session-specific scratchpad files.
+   */
+  getScratchpadDir(): string {
+    const scratchpadDir = this.sessionId
+      ? path.join(this.getProjectTempDir(), this.sessionId, 'scratchpad')
+      : path.join(this.getProjectTempDir(), 'scratchpad');
+    if (!fs.existsSync(scratchpadDir)) {
+      fs.mkdirSync(scratchpadDir, { recursive: true });
+    }
+    return scratchpadDir;
   }
 }

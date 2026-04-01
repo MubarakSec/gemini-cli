@@ -10,6 +10,7 @@
  */
 
 import type { CoreToolSet } from '../types.js';
+import { Type } from '@google/genai';
 import {
   GLOB_TOOL_NAME,
   GREP_TOOL_NAME,
@@ -50,6 +51,7 @@ import {
   GREP_PARAM_TYPE,
   GREP_PARAM_MULTILINE,
   GREP_PARAM_OFFSET,
+  LIST_SCRATCHPAD_TOOL_NAME,
   EDIT_PARAM_INSTRUCTION,
   EDIT_PARAM_OLD_STRING,
   EDIT_PARAM_NEW_STRING,
@@ -766,6 +768,17 @@ The agent did not use the todo list because this task could be completed by a ti
   },
 
   exit_plan_mode: () => getExitPlanModeDeclaration(),
+
+  list_scratchpad: () => ({
+    name: LIST_SCRATCHPAD_TOOL_NAME,
+    description:
+      "Lists all temporary files stored in the agent's session-specific scratchpad directory.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {},
+    },
+  }),
+
   activate_skill: (skillNames) => getActivateSkillDeclaration(skillNames),
   update_topic: getUpdateTopicDeclaration(),
 };

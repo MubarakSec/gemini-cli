@@ -26,6 +26,7 @@ import {
   formatTruncatedToolOutput,
 } from '../utils/fileUtils.js';
 import { convertToFunctionResponse } from '../utils/generateContentResponseUtilities.js';
+import { HintService } from '../services/hintService.js';
 import {
   CoreToolCallStatus,
   type CompletedToolCall,
@@ -367,8 +368,21 @@ export class ToolExecutor {
     call: ToolCall,
     toolResult: ToolResult,
   ): Promise<SuccessfulToolCall> {
+    let llmContent = toolResult.llmContent;
+
+    // Scan for side-channel hints in tool output
+    if (typeof llmContent === 'string') {
+      const { text, hints } = HintService.extractHints(llmContent);
+      if (hints.length > 0) {
+        for (const hint of hints) {
+          this.config.hintService.emitHint(hint);
+        }
+        llmContent = text;
+      }
+    }
+
     const { truncatedContent: content, outputFile } =
-      await this.truncateOutputIfNeeded(call, toolResult.llmContent);
+      await this.truncateOutputIfNeeded(call, llmContent);
 
     const toolName = call.request.originalRequestName || call.request.name;
     const callId = call.request.callId;

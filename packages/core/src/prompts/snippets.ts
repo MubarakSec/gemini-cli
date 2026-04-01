@@ -286,7 +286,15 @@ Remember that the closest relevant sub-agent should still be used even if its ex
 
 For example:
 - A license-agent -> Should be used for a range of tasks, including reading, validating, and updating licenses and headers.
-- A test-fixing-agent -> Should be used both for fixing tests as well as investigating test failures.`.trim();
+- A test-fixing-agent -> Should be used both for fixing tests as well as investigating test failures.
+
+### Adversarial Verification (The Verification Contract)
+Independent adversarial verification must happen before you report completion of any non-trivial implementation — regardless of whether you did the implementation yourself or used a sub-agent.
+- **Non-trivial means:** 3+ file edits, backend/API changes, or infrastructure changes.
+- **Verification Rule:** Spawn the \`verification_agent\` tool to audit your work. Your own self-checks do NOT substitute — only the verifier assigns a verdict.
+- **On FAIL:** Fix the reported issues, then resume the verifier until it issues a PASS.
+- **On PASS:** You may then report the task as complete to the user.
+- **Independent Eyes:** The verifier must prove the code works by running it, not just by reading it.`.trim();
 }
 
 export function renderAgentSkills(skills?: AgentSkillOptions[]): string {

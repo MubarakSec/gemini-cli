@@ -46,6 +46,9 @@ export const GREP_PARAM_TYPE = 'type';
 export const GREP_PARAM_MULTILINE = 'multiline';
 export const GREP_PARAM_OFFSET = 'offset';
 
+// -- list_scratchpad --
+export const LIST_SCRATCHPAD_TOOL_NAME = 'list_scratchpad';
+
 // -- list_directory --
 export const LS_TOOL_NAME = 'list_directory';
 export const LS_PARAM_IGNORE = 'ignore';

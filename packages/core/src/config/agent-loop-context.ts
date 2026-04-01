@@ -11,6 +11,7 @@ import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { SandboxManager } from '../services/sandboxManager.js';
 import type { Config } from './config.js';
+import type { VerificationService } from '../services/verificationService.js';
 
 /**
  * AgentLoopContext represents the execution-scoped view of the world for a single
@@ -43,4 +44,7 @@ export interface AgentLoopContext {
 
   /** The service used to prepare commands for sandboxed execution. */
   readonly sandboxManager: SandboxManager;
+
+  /** The service used to manage adversarial verification of code changes. */
+  readonly verificationService?: VerificationService;
 }
