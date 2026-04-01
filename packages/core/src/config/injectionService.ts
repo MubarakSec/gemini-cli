@@ -8,11 +8,15 @@
  * Source of an injection into the model conversation.
  * - `user_steering`: Interactive guidance from the user (gated on model steering).
  * - `background_completion`: Output from a backgrounded execution that has finished.
+ * - `advisor_hint`: Architectural hints from the Speculative Advisor.
  */
 
 import { debugLogger } from '../utils/debugLogger.js';
 
-export type InjectionSource = 'user_steering' | 'background_completion';
+export type InjectionSource =
+  | 'user_steering'
+  | 'background_completion'
+  | 'advisor_hint';
 
 /**
  * Typed listener that receives both the injection text and its source.

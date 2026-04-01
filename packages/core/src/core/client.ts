@@ -894,6 +894,26 @@ export class GeminiClient {
     const hooksEnabled = this.config.getEnableHooks();
     const messageBus = this.context.messageBus;
 
+    // Trigger Speculative Advisor in parallel
+    if (this.config.isInteractive()) {
+      const userRequest = partListUnionToString(request);
+      this.config.advisorService
+        .getArchitecturalHint(this.getChat().getHistory(), userRequest, signal)
+        .then((hint) => {
+          if (hint) {
+            const formatted =
+              this.config.advisorService.formatHintForInjection(hint);
+            this.config.injectionService.addInjection(
+              formatted,
+              'advisor_hint',
+            );
+          }
+        })
+        .catch((err) => {
+          debugLogger.debug(`[Advisor] Failed to process hint: ${err.message}`);
+        });
+    }
+
     if (this.lastPromptId !== prompt_id) {
       this.loopDetector.reset(prompt_id, partListUnionToString(request));
       this.hookStateMap.delete(this.lastPromptId);

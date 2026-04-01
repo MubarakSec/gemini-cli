@@ -82,6 +82,7 @@ import { WriteTodosTool } from '../tools/write-todos.js';
 import { LSPQueryTool } from '../tools/lsp/lsp-query.js';
 import { ListScratchpadTool } from '../tools/list-scratchpad.js';
 import { HintService } from '../services/hintService.js';
+import { AdvisorService } from '../services/advisorService.js';
 import {
   initializeLspServerManager,
   shutdownLspServerManager,
@@ -968,9 +969,11 @@ export class Config implements McpContext, AgentLoopContext {
   private approvedPlanPath: string | undefined;
 
   readonly hintService: HintService;
+  readonly advisorService: AdvisorService;
 
   constructor(params: ConfigParameters) {
     this.hintService = new HintService();
+    this.advisorService = new AdvisorService(this);
     this._sessionId = params.sessionId;
     this.clientName = params.clientName;
     this.clientVersion = params.clientVersion ?? 'unknown';
