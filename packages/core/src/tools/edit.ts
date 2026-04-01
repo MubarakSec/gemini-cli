@@ -46,6 +46,9 @@ import {
   logEditCorrectionEvent,
 } from '../telemetry/loggers.js';
 
+import { getLspServerManager } from '../services/lsp/manager.js';
+import { clearDeliveredDiagnosticsForFile } from '../services/lsp/LSPDiagnosticRegistry.js';
+
 import {
   EDIT_TOOL_NAME,
   READ_FILE_TOOL_NAME,
@@ -61,6 +64,26 @@ import { discoverJitContext, appendJitContext } from './jit-context.js';
 const ENABLE_FUZZY_MATCH_RECOVERY = true;
 const FUZZY_MATCH_THRESHOLD = 0.1; // Allow up to 10% weighted difference
 const WHITESPACE_PENALTY_FACTOR = 0.1; // Whitespace differences cost 10% of a character difference
+
+// Quote normalization constants
+const LEFT_SINGLE_CURLY_QUOTE = '‘';
+const RIGHT_SINGLE_CURLY_QUOTE = '’';
+const LEFT_DOUBLE_CURLY_QUOTE = '“';
+const RIGHT_DOUBLE_CURLY_QUOTE = '”';
+
+/**
+ * Normalizes text for comparison by converting curly quotes to straight quotes
+ * and standardizing line endings.
+ */
+function normalizeTextForComparison(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replaceAll(LEFT_SINGLE_CURLY_QUOTE, "'")
+    .replaceAll(RIGHT_SINGLE_CURLY_QUOTE, "'")
+    .replaceAll(LEFT_DOUBLE_CURLY_QUOTE, '"')
+    .replaceAll(RIGHT_DOUBLE_CURLY_QUOTE, '"');
+}
+
 interface ReplacementContext {
   params: EditToolParams;
   currentContent: string;
@@ -135,22 +158,23 @@ async function calculateExactReplacement(
   const { currentContent, params } = context;
   const { old_string, new_string } = params;
 
-  const normalizedCode = currentContent;
+  const normalizedCode = currentContent.replace(/\r\n/g, '\n');
   const normalizedSearch = old_string.replace(/\r\n/g, '\n');
   const normalizedReplace = new_string.replace(/\r\n/g, '\n');
 
+  // 1. Try exact match first (standard behavior)
   const exactOccurrences = normalizedCode.split(normalizedSearch).length - 1;
 
-  if (!params.allow_multiple && exactOccurrences > 1) {
-    return {
-      newContent: currentContent,
-      occurrences: exactOccurrences,
-      finalOldString: normalizedSearch,
-      finalNewString: normalizedReplace,
-    };
-  }
-
   if (exactOccurrences > 0) {
+    if (!params.allow_multiple && exactOccurrences > 1) {
+      return {
+        newContent: currentContent,
+        occurrences: exactOccurrences,
+        finalOldString: normalizedSearch,
+        finalNewString: normalizedReplace,
+      };
+    }
+
     let modifiedCode = safeLiteralReplace(
       normalizedCode,
       normalizedSearch,
@@ -162,6 +186,46 @@ async function calculateExactReplacement(
       occurrences: exactOccurrences,
       finalOldString: normalizedSearch,
       finalNewString: normalizedReplace,
+      strategy: 'exact',
+    };
+  }
+
+  // 2. Try match with quote normalization
+  const fullyNormalizedCode = normalizeTextForComparison(normalizedCode);
+  const fullyNormalizedSearch = normalizeTextForComparison(normalizedSearch);
+
+  const normalizedOccurrences =
+    fullyNormalizedCode.split(fullyNormalizedSearch).length - 1;
+
+  if (normalizedOccurrences > 0) {
+    if (!params.allow_multiple && normalizedOccurrences > 1) {
+      return {
+        newContent: currentContent,
+        occurrences: normalizedOccurrences,
+        finalOldString: normalizedSearch,
+        finalNewString: normalizedReplace,
+      };
+    }
+
+    // Find the actual string in the source that matched
+    const matchIndex = fullyNormalizedCode.indexOf(fullyNormalizedSearch);
+    const actualOldString = normalizedCode.substring(
+      matchIndex,
+      matchIndex + normalizedSearch.length,
+    );
+
+    let modifiedCode = safeLiteralReplace(
+      normalizedCode,
+      actualOldString,
+      normalizedReplace,
+    );
+    modifiedCode = restoreTrailingNewline(currentContent, modifiedCode);
+    return {
+      newContent: modifiedCode,
+      occurrences: 1, // We only found one specific match via index
+      finalOldString: actualOldString,
+      finalNewString: normalizedReplace,
+      strategy: 'exact',
     };
   }
 
@@ -174,23 +238,26 @@ async function calculateFlexibleReplacement(
   const { currentContent, params } = context;
   const { old_string, new_string } = params;
 
-  const normalizedCode = currentContent;
+  const normalizedCode = currentContent.replace(/\r\n/g, '\n');
   const normalizedSearch = old_string.replace(/\r\n/g, '\n');
   const normalizedReplace = new_string.replace(/\r\n/g, '\n');
 
   const sourceLines = normalizedCode.match(/.*(?:\n|$)/g)?.slice(0, -1) ?? [];
-  const searchLinesStripped = normalizedSearch
-    .split('\n')
-    .map((line: string) => line.trim());
+  const searchLines = normalizedSearch.split('\n');
+  const searchLinesNormalized = searchLines.map((line: string) =>
+    normalizeTextForComparison(line).trim(),
+  );
   const replaceLines = normalizedReplace.split('\n');
 
   let flexibleOccurrences = 0;
   let i = 0;
-  while (i <= sourceLines.length - searchLinesStripped.length) {
-    const window = sourceLines.slice(i, i + searchLinesStripped.length);
-    const windowStripped = window.map((line: string) => line.trim());
-    const isMatch = windowStripped.every(
-      (line: string, index: number) => line === searchLinesStripped[index],
+  while (i <= sourceLines.length - searchLinesNormalized.length) {
+    const window = sourceLines.slice(i, i + searchLinesNormalized.length);
+    const windowNormalized = window.map((line: string) =>
+      normalizeTextForComparison(line).trim(),
+    );
+    const isMatch = windowNormalized.every(
+      (line: string, index: number) => line === searchLinesNormalized[index],
     );
 
     if (isMatch) {
@@ -201,7 +268,7 @@ async function calculateFlexibleReplacement(
       const newBlockWithIndent = applyIndentation(replaceLines, indentation);
       sourceLines.splice(
         i,
-        searchLinesStripped.length,
+        searchLinesNormalized.length,
         newBlockWithIndent.join('\n'),
       );
       i += replaceLines.length;
@@ -218,6 +285,7 @@ async function calculateFlexibleReplacement(
       occurrences: flexibleOccurrences,
       finalOldString: normalizedSearch,
       finalNewString: normalizedReplace,
+      strategy: 'flexible',
     };
   }
 
@@ -238,7 +306,7 @@ async function calculateRegexReplacement(
   // It builds a flexible, multi-line regex from a search string.
   const delimiters = ['(', ')', ':', '[', ']', '{', '}', '>', '<', '='];
 
-  let processedString = normalizedSearch;
+  let processedString = normalizeTextForComparison(normalizedSearch);
   for (const delim of delimiters) {
     processedString = processedString.split(delim).join(` ${delim} `);
   }
@@ -252,7 +320,14 @@ async function calculateRegexReplacement(
 
   const escapedTokens = tokens.map(escapeRegex);
   // Join tokens with `\s*` to allow for flexible whitespace between them.
-  const pattern = escapedTokens.join('\\s*');
+  // We also replace standard quote characters in the regex with a pattern that matches both straight and curly quotes.
+  const pattern = escapedTokens
+    .join('\\s*')
+    .replaceAll("'", `['${LEFT_SINGLE_CURLY_QUOTE}${RIGHT_SINGLE_CURLY_QUOTE}]`)
+    .replaceAll(
+      '"',
+      `["${LEFT_DOUBLE_CURLY_QUOTE}${RIGHT_DOUBLE_CURLY_QUOTE}]`,
+    );
 
   // The final pattern captures leading whitespace (indentation) and then matches the token pattern.
   // 'm' flag enables multi-line mode, so '^' matches the start of any line.
@@ -890,6 +965,28 @@ class EditToolInvocation
         .getFileSystemService()
         .writeTextFile(this.resolvedPath, finalContent);
 
+      // Notify LSP servers about file modification (didChange) and save (didSave)
+      const lspManager = getLspServerManager();
+      if (lspManager) {
+        // Clear previously delivered diagnostics so new ones will be shown
+        const fileUri = `file://${this.resolvedPath}`;
+        clearDeliveredDiagnosticsForFile(fileUri);
+        // didChange: Content has been modified
+        lspManager
+          .changeFile(this.resolvedPath, finalContent)
+          .catch((err: Error) => {
+            debugLogger.debug(
+              `LSP: Failed to notify server of file change for ${this.resolvedPath}: ${err.message}`,
+            );
+          });
+        // didSave: File has been saved to disk (triggers diagnostics in server)
+        lspManager.saveFile(this.resolvedPath).catch((err: Error) => {
+          debugLogger.debug(
+            `LSP: Failed to notify server of file save for ${this.resolvedPath}: ${err.message}`,
+          );
+        });
+      }
+
       let displayResult: ToolResultDisplay;
       if (editData.isNewFile) {
         displayResult = `Created ${shortenPath(makeRelative(this.resolvedPath, this.config.getTargetDir()))}`;
@@ -1229,12 +1326,14 @@ async function calculateFuzzyReplacement(
 
   const N = searchLines.length;
   const candidates: Array<{ index: number; score: number }> = [];
-  const searchBlock = searchLines.join('\n');
 
   // Sliding window
   for (let i = 0; i <= sourceLines.length - N; i++) {
     const windowLines = sourceLines.slice(i, i + N);
-    const windowText = windowLines.map((l) => l.trimEnd()).join('\n'); // Normalized join for comparison
+    const windowText = normalizeTextForComparison(
+      windowLines.map((l) => l.trimEnd()).join('\n'),
+    );
+    const searchBlock = normalizeTextForComparison(searchLines.join('\n'));
 
     // Length Heuristic Optimization
     const lengthDiff = Math.abs(windowText.length - searchBlock.length);
