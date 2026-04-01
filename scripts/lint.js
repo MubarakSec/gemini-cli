@@ -234,7 +234,7 @@ export function runYamllint() {
 
 export function runPrettier() {
   console.log('\nRunning Prettier...');
-  if (!runCommand('prettier --check .')) {
+  if (!runCommand('prettier --check --cache .')) {
     console.log(
       'Prettier check failed. Please run "npm run format" to fix formatting issues.',
     );
@@ -470,48 +470,63 @@ If you must use a tag, you can ignore this check by adding a comment (discourage
   }
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
   if (args.includes('--setup')) {
     setupLinters();
   }
+
+  const tasks = [];
+
   if (args.includes('--eslint')) {
-    runESLint();
+    tasks.push(runESLint);
   }
   if (args.includes('--actionlint')) {
-    runActionlint();
+    tasks.push(runActionlint);
   }
   if (args.includes('--shellcheck')) {
-    runShellcheck();
+    tasks.push(runShellcheck);
   }
   if (args.includes('--yamllint')) {
-    runYamllint();
+    tasks.push(runYamllint);
   }
   if (args.includes('--prettier')) {
-    runPrettier();
+    tasks.push(runPrettier);
   }
   if (args.includes('--sensitive-keywords')) {
-    runSensitiveKeywordLinter();
+    tasks.push(runSensitiveKeywordLinter);
   }
   if (args.includes('--tsconfig')) {
-    runTSConfigLinter();
+    tasks.push(runTSConfigLinter);
   }
   if (args.includes('--check-github-actions-pinning')) {
-    runGithubActionsPinningLinter();
+    tasks.push(runGithubActionsPinningLinter);
   }
 
-  if (args.length === 0) {
+  if (args.length === 0 || (args.length === 1 && args[0] === '--setup')) {
     setupLinters();
-    runESLint();
-    runActionlint();
-    runShellcheck();
-    runYamllint();
-    runPrettier();
-    runSensitiveKeywordLinter();
-    runTSConfigLinter();
-    runGithubActionsPinningLinter();
-    console.log('\nAll linting checks passed!');
+    tasks.push(
+      runESLint,
+      runActionlint,
+      runShellcheck,
+      runYamllint,
+      runPrettier,
+      runSensitiveKeywordLinter,
+      runTSConfigLinter,
+      runGithubActionsPinningLinter,
+    );
+  }
+
+  if (tasks.length > 0) {
+    console.log(`Running ${tasks.length} linting tasks in parallel...`);
+    try {
+      await Promise.all(tasks.map((task) => Promise.resolve(task())));
+      console.log('\nAll linting checks passed!');
+    } catch (_error) {
+      console.error('\nLinting failed.');
+      process.exit(1);
+    }
   }
 }
 
