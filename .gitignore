@@ -64,3 +64,5 @@ gemini-debug.log
 evals/logs/
 
 temp_agents/
+idea_factory/
+idea_factory.zip
