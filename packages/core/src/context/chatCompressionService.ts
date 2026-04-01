@@ -119,6 +119,8 @@ export function modelStringToModelConfigAlias(model: string): string {
   }
 }
 
+import { generateToolUseSummary } from './microCompactionService.js';
+
 /**
  * Processes the chat history to ensure function responses don't exceed a specific token budget.
  *
@@ -127,7 +129,7 @@ export function modelStringToModelConfigAlias(model: string): string {
  * 2. It keeps a running tally of tokens used by function responses.
  * 3. Recent tool outputs are preserved in full to maintain high-fidelity context for the current turn.
  * 4. Once the budget (COMPRESSION_FUNCTION_RESPONSE_TOKEN_BUDGET) is exceeded, any older large
- *    tool responses are truncated to their last 30 lines and saved to a temporary file.
+ *    tool responses are summarized using a fast LLM or truncated if summarization fails.
  *
  * This ensures that compression effectively reduces context size even when recent turns
  * contain massive tool outputs (like large grep results or logs).
@@ -183,35 +185,62 @@ async function truncateHistoryToBudget(
             COMPRESSION_FUNCTION_RESPONSE_TOKEN_BUDGET
           ) {
             try {
-              // Budget exceeded: Truncate this response.
-              const { outputFile } = await saveTruncatedToolOutput(
-                contentStr,
-                part.functionResponse.name ?? 'unknown_tool',
-                config.getNextCompressionTruncationId(),
-                config.storage.getProjectTempDir(),
-              );
+              // Find the corresponding function call to get input context
+              let input: unknown = undefined;
+              for (let k = i - 1; k >= 0; k--) {
+                const prev = history[k];
+                const call = prev.parts?.find(
+                  (p) =>
+                    p.functionCall &&
+                    p.functionCall.name === part.functionResponse?.name,
+                );
+                if (call) {
+                  input = call.functionCall?.args;
+                  break;
+                }
+              }
 
-              const truncatedMessage = formatTruncatedToolOutput(
-                contentStr,
-                outputFile,
-                config.getTruncateToolOutputThreshold(),
-              );
+              // Try smart summarization first
+              const summary = await generateToolUseSummary(config, {
+                name: part.functionResponse.name ?? 'unknown_tool',
+                input,
+                output: responseObj,
+              });
+
+              let finalSummaryText: string;
+              if (summary) {
+                finalSummaryText = `[Tool Result Summarized: ${summary}]`;
+              } else {
+                // Fallback to truncation if summarization fails
+                const { outputFile } = await saveTruncatedToolOutput(
+                  contentStr,
+                  part.functionResponse.name ?? 'unknown_tool',
+                  config.getNextCompressionTruncationId(),
+                  config.storage.getProjectTempDir(),
+                );
+
+                finalSummaryText = formatTruncatedToolOutput(
+                  contentStr,
+                  outputFile,
+                  config.getTruncateToolOutputThreshold(),
+                );
+              }
 
               newParts.unshift({
                 functionResponse: {
                   // eslint-disable-next-line @typescript-eslint/no-misused-spread
                   ...part.functionResponse,
-                  response: { output: truncatedMessage },
+                  response: { output: finalSummaryText },
                 },
               });
 
-              // Count the small truncated placeholder towards the budget.
+              // Count the small summary placeholder towards the budget.
               functionResponseTokenCounter += estimateTokenCountSync([
-                { text: truncatedMessage },
+                { text: finalSummaryText },
               ]);
             } catch (error) {
-              // Fallback: if truncation fails, keep the original part to avoid data loss in the chat.
-              debugLogger.debug('Failed to truncate history to budget:', error);
+              // Fallback: if all else fails, keep the original part to avoid data loss in the chat.
+              debugLogger.debug('Failed to compress tool response:', error);
               newParts.unshift(part);
               functionResponseTokenCounter += tokens;
             }
