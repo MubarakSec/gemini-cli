@@ -17,7 +17,7 @@ import { getErrorStatus, ModelNotFoundError } from './httpErrors.js';
 import type { RetryAvailabilityContext } from '../availability/modelPolicy.js';
 
 export type { RetryAvailabilityContext };
-export const DEFAULT_MAX_ATTEMPTS = 20;
+export const DEFAULT_MAX_ATTEMPTS = 10;
 
 export interface RetryOptions {
   maxAttempts: number;
@@ -419,22 +419,44 @@ function logRetryAttempt(
     message = `Attempt ${attempt} failed with status ${errorStatus}. Retrying with backoff...`;
   }
 
+  const shouldLogFullError = !!process.env['VERBOSE'];
+
   if (errorStatus === 429) {
-    debugLogger.warn(message, error);
+    if (shouldLogFullError) {
+      debugLogger.warn(message, error);
+    } else {
+      debugLogger.warn(message);
+    }
   } else if (errorStatus && errorStatus >= 500 && errorStatus < 600) {
-    debugLogger.warn(message, error);
+    if (shouldLogFullError) {
+      debugLogger.warn(message, error);
+    } else {
+      debugLogger.warn(message);
+    }
   } else if (error instanceof Error) {
     // Fallback for errors that might not have a status but have a message
     if (error.message.includes('429')) {
-      debugLogger.warn(
-        `Attempt ${attempt} failed with 429 error (no Retry-After header). Retrying with backoff...`,
-        error,
-      );
+      if (shouldLogFullError) {
+        debugLogger.warn(
+          `Attempt ${attempt} failed with 429 error (no Retry-After header). Retrying with backoff...`,
+          error,
+        );
+      } else {
+        debugLogger.warn(
+          `Attempt ${attempt} failed with 429 error (no Retry-After header). Retrying with backoff...`,
+        );
+      }
     } else if (error.message.match(/5\d{2}/)) {
-      debugLogger.warn(
-        `Attempt ${attempt} failed with 5xx error. Retrying with backoff...`,
-        error,
-      );
+      if (shouldLogFullError) {
+        debugLogger.warn(
+          `Attempt ${attempt} failed with 5xx error. Retrying with backoff...`,
+          error,
+        );
+      } else {
+        debugLogger.warn(
+          `Attempt ${attempt} failed with 5xx error. Retrying with backoff...`,
+        );
+      }
     } else {
       debugLogger.warn(message, error); // Default to warn for other errors
     }

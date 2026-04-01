@@ -19,13 +19,13 @@ export interface UseShellHistoryReturn {
   resetHistoryPosition: () => void;
 }
 
-async function getHistoryFilePath(
+async function getShellHistoryFilePath(
   projectRoot: string,
   configStorage?: Storage,
 ): Promise<string> {
   const storage = configStorage ?? new Storage(projectRoot);
   await storage.initialize();
-  return storage.getHistoryFilePath();
+  return storage.getShellHistoryPath();
 }
 
 // Handle multiline commands
@@ -80,7 +80,7 @@ export function useShellHistory(
 
   useEffect(() => {
     async function loadHistory() {
-      const filePath = await getHistoryFilePath(projectRoot, storage);
+      const filePath = await getShellHistoryFilePath(projectRoot, storage);
       setHistoryFilePath(filePath);
       const loadedHistory = await readHistoryFile(filePath);
       setHistory(loadedHistory.reverse()); // Newest first

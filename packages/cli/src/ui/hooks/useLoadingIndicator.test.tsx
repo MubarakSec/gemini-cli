@@ -241,6 +241,27 @@ describe('useLoadingIndicator', () => {
     expect(result.current.currentLoadingPhrase).toContain('Attempt 3/3');
   });
 
+  it('should reflect retry status with error in currentLoadingPhrase when provided', async () => {
+    const retryStatus = {
+      model: 'gemini-pro',
+      attempt: 2,
+      maxAttempts: 3,
+      delayMs: 1000,
+      error: 'Rate limit exceeded',
+    };
+    const { result } = await renderLoadingIndicatorHook(
+      StreamingState.Responding,
+      false,
+      retryStatus,
+    );
+
+    expect(result.current.currentLoadingPhrase).toContain('Trying to reach');
+    expect(result.current.currentLoadingPhrase).toContain('Attempt 3/3');
+    expect(result.current.currentLoadingPhrase).toContain(
+      'Rate limit exceeded',
+    );
+  });
+
   it('should hide low-verbosity retry status for early retry attempts', async () => {
     const retryStatus = {
       model: 'gemini-pro',

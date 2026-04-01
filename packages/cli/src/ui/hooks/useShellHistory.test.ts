@@ -46,7 +46,7 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
     getProjectTempDir(): string {
       return path.join('/test/home/', actual.GEMINI_DIR, 'tmp', 'mocked_hash');
     }
-    getHistoryFilePath(): string {
+    getShellHistoryPath(): string {
       return path.join(
         '/test/home/',
         actual.GEMINI_DIR,

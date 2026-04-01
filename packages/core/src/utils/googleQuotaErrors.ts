@@ -248,7 +248,7 @@ export function classifyGoogleError(error: unknown): unknown {
     googleApiError.details.length === 0
   ) {
     // Fallback: try to parse the error message for a retry delay
-    const errorMessage =
+    let errorMessage =
       googleApiError?.message ||
       (error instanceof Error ? error.message : String(error));
     const match = errorMessage.match(/Please retry in ([0-9.]+(?:ms|s))/);
@@ -268,6 +268,14 @@ export function classifyGoogleError(error: unknown): unknown {
     } else if (status === 429 || status === 499) {
       // Fallback: If it is a 429 or 499 but doesn't have a specific "retry in" message,
       // assume it is a temporary rate limit and retry after 5 sec (same as DEFAULT_RETRY_OPTIONS).
+      if (
+        errorMessage === 'Too Many Requests' ||
+        errorMessage.includes('429') ||
+        errorMessage.toLowerCase().includes('rate limit')
+      ) {
+        errorMessage =
+          'Rate limit exceeded. Please wait a moment and try again.';
+      }
       return new RetryableQuotaError(
         errorMessage,
         googleApiError ?? {
