@@ -51,6 +51,9 @@ import { detectOmissionPlaceholders } from './omissionPlaceholderDetector.js';
 import { isGemini3Model } from '../config/models.js';
 import { discoverJitContext, appendJitContext } from './jit-context.js';
 
+import { getLspServerManager } from '../services/lsp/manager.js';
+import { clearDeliveredDiagnosticsForFile } from '../services/lsp/LSPDiagnosticRegistry.js';
+
 /**
  * Parameters for the WriteFile tool
  */
@@ -330,6 +333,28 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       await this.config
         .getFileSystemService()
         .writeTextFile(this.resolvedPath, finalContent);
+
+      // Notify LSP servers about file modification (didChange) and save (didSave)
+      const lspManager = getLspServerManager();
+      if (lspManager) {
+        // Clear previously delivered diagnostics so new ones will be shown
+        const fileUri = `file://${this.resolvedPath}`;
+        clearDeliveredDiagnosticsForFile(fileUri);
+        // didChange: Content has been modified
+        lspManager
+          .changeFile(this.resolvedPath, finalContent)
+          .catch((err: Error) => {
+            debugLogger.debug(
+              `LSP: Failed to notify server of file change for ${this.resolvedPath}: ${err.message}`,
+            );
+          });
+        // didSave: File has been saved to disk (triggers diagnostics in server)
+        lspManager.saveFile(this.resolvedPath).catch((err: Error) => {
+          debugLogger.debug(
+            `LSP: Failed to notify server of file save for ${this.resolvedPath}: ${err.message}`,
+          );
+        });
+      }
 
       // Generate diff for display result
       const fileName = path.basename(this.resolvedPath);

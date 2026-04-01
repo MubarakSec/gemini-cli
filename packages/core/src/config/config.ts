@@ -79,6 +79,13 @@ import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { ideContextStore } from '../ide/ideContext.js';
 import { WriteTodosTool } from '../tools/write-todos.js';
+import { LSPQueryTool } from '../tools/lsp/lsp-query.js';
+import {
+  initializeLspServerManager,
+  shutdownLspServerManager,
+} from '../services/lsp/manager.js';
+
+// ... (existing imports)
 import {
   StandardFileSystemService,
   type FileSystemService,
@@ -1310,10 +1317,7 @@ export class Config implements McpContext, AgentLoopContext {
       },
     };
     this.retryFetchErrors = params.retryFetchErrors ?? true;
-    this.maxAttempts = Math.min(
-      params.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
-      DEFAULT_MAX_ATTEMPTS,
-    );
+    this.maxAttempts = params.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     this.disableYoloMode = params.disableYoloMode ?? false;
     this.rawOutput = params.rawOutput ?? false;
     this.acceptRawOutputRisk = params.acceptRawOutputRisk ?? false;
@@ -1418,6 +1422,7 @@ export class Config implements McpContext, AgentLoopContext {
     coreEvents.on(CoreEvent.AgentsRefreshed, this.onAgentsRefreshed);
 
     this._toolRegistry = await this.createToolRegistry();
+    initializeLspServerManager(this);
     discoverToolsHandle?.end();
     this.mcpClientManager = new McpClientManager(
       this.clientVersion,
@@ -3437,6 +3442,10 @@ export class Config implements McpContext, AgentLoopContext {
       registry.registerTool(new ReadFileTool(this, this.messageBus)),
     );
 
+    maybeRegister(LSPQueryTool, () =>
+      registry.registerTool(new LSPQueryTool(this, this.messageBus)),
+    );
+
     if (this.getUseRipgrep()) {
       let useRipgrep = false;
       let errorString: undefined | string = undefined;
@@ -3691,6 +3700,7 @@ export class Config implements McpContext, AgentLoopContext {
   async dispose(): Promise<void> {
     this.logCurrentModeDuration(this.getApprovalMode());
     coreEvents.off(CoreEvent.AgentsRefreshed, this.onAgentsRefreshed);
+    await shutdownLspServerManager();
     this.agentRegistry?.dispose();
     this._geminiClient?.dispose();
     if (this.mcpClientManager) {
