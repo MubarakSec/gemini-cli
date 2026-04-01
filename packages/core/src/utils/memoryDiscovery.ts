@@ -221,7 +221,7 @@ async function getGeminiMdFilePathsInternal(
   ]);
 
   // Process directories in parallel with concurrency limit to prevent EMFILE errors
-  const CONCURRENT_LIMIT = 10;
+  const CONCURRENT_LIMIT = 20;
   const dirsArray = Array.from(dirs);
   const globalPaths = new Set<string>();
   const projectPaths = new Set<string>();

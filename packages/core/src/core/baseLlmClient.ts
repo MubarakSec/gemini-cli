@@ -328,7 +328,9 @@ export class BaseLlmClient {
       return await retryWithBackoff(apiCall, {
         shouldRetryOnContent,
         maxAttempts:
-          availabilityMaxAttempts ?? maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+          availabilityMaxAttempts ??
+          maxAttempts ??
+          this.config.getMaxAttempts(),
         getAvailabilityContext,
         onPersistent429: this.config.isInteractive()
           ? (authType, error) =>

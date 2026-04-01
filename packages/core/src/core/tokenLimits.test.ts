@@ -16,13 +16,13 @@ import {
 
 describe('tokenLimit', () => {
   it('should return the correct token limit for default models', () => {
-    expect(tokenLimit(DEFAULT_GEMINI_MODEL)).toBe(1_048_576);
+    expect(tokenLimit(DEFAULT_GEMINI_MODEL)).toBe(2_097_152);
     expect(tokenLimit(DEFAULT_GEMINI_FLASH_MODEL)).toBe(1_048_576);
     expect(tokenLimit(DEFAULT_GEMINI_FLASH_LITE_MODEL)).toBe(1_048_576);
   });
 
   it('should return the correct token limit for preview models', () => {
-    expect(tokenLimit(PREVIEW_GEMINI_MODEL)).toBe(1_048_576);
+    expect(tokenLimit(PREVIEW_GEMINI_MODEL)).toBe(2_097_152);
     expect(tokenLimit(PREVIEW_GEMINI_FLASH_MODEL)).toBe(1_048_576);
   });
 
