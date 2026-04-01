@@ -17,7 +17,11 @@ import {
   type ToolResult,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
-import { makeRelative, shortenPath } from '../utils/paths.js';
+import {
+  makeRelative,
+  shortenPath,
+  suggestPathUnderCwd,
+} from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import type { Config } from '../config/config.js';
 import { fileExists } from '../utils/fileUtils.js';
@@ -175,6 +179,21 @@ export interface RipGrepToolParams {
    * Optional: Maximum number of total matches to return. Use this to limit the overall size of the response. Defaults to 100 if omitted.
    */
   total_max_matches?: number;
+
+  /**
+   * Optional: File type to search (e.g., js, py, rust, go). More efficient than include_pattern for standard file types.
+   */
+  type?: string;
+
+  /**
+   * Optional: If true, enables multiline mode where . matches newlines and patterns can span multiple lines.
+   */
+  multiline?: boolean;
+
+  /**
+   * Optional: Skip the first N matches. Useful for paginating through large result sets.
+   */
+  offset?: number;
 }
 
 class GrepToolInvocation extends BaseToolInvocation<
@@ -225,11 +244,19 @@ class GrepToolInvocation extends BaseToolInvocation<
         }
       } catch (error: unknown) {
         if (isNodeError(error) && error.code === 'ENOENT') {
+          let errorMsg = `Path does not exist: ${searchDirAbs}`;
+          const suggestion = await suggestPathUnderCwd(
+            searchDirAbs,
+            this.config.getTargetDir(),
+          );
+          if (suggestion) {
+            errorMsg += `. Did you mean ${suggestion}?`;
+          }
           return {
-            llmContent: `Path does not exist: ${searchDirAbs}`,
+            llmContent: errorMsg,
             returnDisplay: 'Error: Path does not exist.',
             error: {
-              message: `Path does not exist: ${searchDirAbs}`,
+              message: errorMsg,
               type: ToolErrorType.FILE_NOT_FOUND,
             },
           };
@@ -286,6 +313,8 @@ class GrepToolInvocation extends BaseToolInvocation<
           maxMatches: totalMaxMatches,
           max_matches_per_file: this.params.max_matches_per_file,
           signal: timeoutController.signal,
+          type: this.params.type,
+          multiline: this.params.multiline,
         });
       } catch (error) {
         if (timeoutController.signal.aborted) {
@@ -324,6 +353,10 @@ class GrepToolInvocation extends BaseToolInvocation<
       );
 
       const searchLocationDescription = `in path "${searchDirDisplay}"`;
+
+      if (this.params.offset && this.params.offset > 0) {
+        allMatches = allMatches.slice(this.params.offset);
+      }
 
       return await formatGrepResults(
         allMatches,
@@ -374,6 +407,8 @@ class GrepToolInvocation extends BaseToolInvocation<
         maxMatches: totalMaxMatches,
         max_matches_per_file: this.params.max_matches_per_file,
         signal,
+        type: this.params.type,
+        multiline: this.params.multiline,
       });
 
       if (!this.params.no_ignore) {
@@ -407,6 +442,8 @@ class GrepToolInvocation extends BaseToolInvocation<
     maxMatches: number;
     max_matches_per_file?: number;
     signal: AbortSignal;
+    type?: string;
+    multiline?: boolean;
   }): Promise<GrepMatch[]> {
     const {
       pattern,
@@ -422,6 +459,8 @@ class GrepToolInvocation extends BaseToolInvocation<
       no_ignore,
       maxMatches,
       max_matches_per_file,
+      type,
+      multiline,
     } = options;
 
     const searchPaths = Array.isArray(path) ? path : [path];
@@ -434,6 +473,14 @@ class GrepToolInvocation extends BaseToolInvocation<
 
     if (fixed_strings) {
       rgArgs.push('--fixed-strings');
+    }
+
+    if (multiline) {
+      rgArgs.push('-U', '--multiline-dotall');
+    }
+
+    if (type) {
+      rgArgs.push('--type', type);
     }
 
     rgArgs.push('--regexp', pattern);

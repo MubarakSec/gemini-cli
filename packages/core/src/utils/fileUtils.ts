@@ -14,6 +14,7 @@ import { ToolErrorType } from '../tools/tool-error.js';
 import { BINARY_EXTENSIONS } from './ignorePatterns.js';
 import { createRequire as createModuleRequire } from 'node:module';
 import { debugLogger } from './debugLogger.js';
+import { suggestPathUnderCwd } from './paths.js';
 import {
   DEFAULT_MAX_LINES_TEXT_FILE,
   MAX_LINE_LENGTH_TEXT_FILE,
@@ -414,11 +415,15 @@ export async function processSingleFileContent(
   try {
     if (!fs.existsSync(filePath)) {
       // Sync check is acceptable before async read
+      let errorMsg = `File not found: ${filePath}`;
+      const suggestion = await suggestPathUnderCwd(filePath, rootDirectory);
+      if (suggestion) {
+        errorMsg += `. Did you mean ${suggestion}?`;
+      }
       return {
-        llmContent:
-          'Could not read file because no file was found at the specified path.',
+        llmContent: `Could not read file because no file was found at the specified path. ${errorMsg}`,
         returnDisplay: 'File not found.',
-        error: `File not found: ${filePath}`,
+        error: errorMsg,
         errorType: ToolErrorType.FILE_NOT_FOUND,
       };
     }

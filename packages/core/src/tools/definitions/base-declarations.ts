@@ -42,6 +42,9 @@ export const GREP_PARAM_CONTEXT = 'context';
 export const GREP_PARAM_AFTER = 'after';
 export const GREP_PARAM_BEFORE = 'before';
 export const GREP_PARAM_NO_IGNORE = 'no_ignore';
+export const GREP_PARAM_TYPE = 'type';
+export const GREP_PARAM_MULTILINE = 'multiline';
+export const GREP_PARAM_OFFSET = 'offset';
 
 // -- list_directory --
 export const LS_TOOL_NAME = 'list_directory';

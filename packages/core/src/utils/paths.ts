@@ -418,3 +418,56 @@ function robustRealpath(p: string, visited = new Set<string>()): string {
     throw e;
   }
 }
+
+/**
+ * Suggests a corrected path under the current working directory when a file/directory
+ * is not found. Detects the "dropped repo folder" pattern where the model constructs
+ * an absolute path missing the repo directory component.
+ *
+ * Example:
+ *   cwd = /Users/zeeg/src/currentRepo
+ *   requestedPath = /Users/zeeg/src/foobar           (doesn't exist)
+ *   returns        /Users/zeeg/src/currentRepo/foobar (if it exists)
+ *
+ * @param requestedPath - The absolute path that was not found
+ * @param cwd - The current working directory
+ * @returns The corrected path if found under cwd, undefined otherwise
+ */
+export async function suggestPathUnderCwd(
+  requestedPath: string,
+  cwd: string,
+): Promise<string | undefined> {
+  const cwdParent = path.dirname(cwd);
+
+  // Resolve symlinks in the requested path's parent directory
+  let resolvedPath = requestedPath;
+  try {
+    const resolvedDir = await fs.promises.realpath(path.dirname(requestedPath));
+    resolvedPath = path.join(resolvedDir, path.basename(requestedPath));
+  } catch {
+    // Parent directory doesn't exist, use the original path
+  }
+
+  // Only check if the requested path is under cwd's parent but not under cwd itself.
+  const cwdParentPrefix =
+    cwdParent === path.sep ? path.sep : cwdParent + path.sep;
+  if (
+    !resolvedPath.startsWith(cwdParentPrefix) ||
+    resolvedPath.startsWith(cwd + path.sep) ||
+    resolvedPath === cwd
+  ) {
+    return undefined;
+  }
+
+  // Get the relative path from the parent directory
+  const relFromParent = path.relative(cwdParent, resolvedPath);
+
+  // Check if the same relative path exists under cwd
+  const correctedPath = path.join(cwd, relFromParent);
+  try {
+    await fs.promises.stat(correctedPath);
+    return correctedPath;
+  } catch {
+    return undefined;
+  }
+}

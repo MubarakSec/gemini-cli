@@ -47,6 +47,9 @@ import {
   GREP_PARAM_AFTER,
   GREP_PARAM_BEFORE,
   GREP_PARAM_NO_IGNORE,
+  GREP_PARAM_TYPE,
+  GREP_PARAM_MULTILINE,
+  GREP_PARAM_OFFSET,
   EDIT_PARAM_INSTRUCTION,
   EDIT_PARAM_OLD_STRING,
   EDIT_PARAM_NEW_STRING,
@@ -171,6 +174,22 @@ export const DEFAULT_LEGACY_SET: CoreToolSet = {
           type: 'integer',
           minimum: 1,
         },
+        [GREP_PARAM_TYPE]: {
+          description:
+            'Optional: File type to search (e.g., js, py, rust, go). More efficient than include_pattern for standard file types.',
+          type: 'string',
+        },
+        [GREP_PARAM_MULTILINE]: {
+          description:
+            'Optional: If true, enables multiline mode where . matches newlines and patterns can span multiple lines.',
+          type: 'boolean',
+        },
+        [GREP_PARAM_OFFSET]: {
+          description:
+            'Optional: Skip the first N matches. Useful for paginating through large result sets.',
+          type: 'integer',
+          minimum: 0,
+        },
       },
       required: [PARAM_PATTERN],
     },
@@ -250,6 +269,22 @@ export const DEFAULT_LEGACY_SET: CoreToolSet = {
             'Optional: Maximum number of total matches to return. Use this to limit the overall size of the response. Defaults to 100 if omitted.',
           type: 'integer',
           minimum: 1,
+        },
+        [GREP_PARAM_TYPE]: {
+          description:
+            'Optional: File type to search (e.g., js, py, rust, go). More efficient than include_pattern for standard file types.',
+          type: 'string',
+        },
+        [GREP_PARAM_MULTILINE]: {
+          description:
+            'Optional: If true, enables multiline mode where . matches newlines and patterns can span multiple lines.',
+          type: 'boolean',
+        },
+        [GREP_PARAM_OFFSET]: {
+          description:
+            'Optional: Skip the first N matches. Useful for paginating through large result sets.',
+          type: 'integer',
+          minimum: 0,
         },
       },
       required: [PARAM_PATTERN],
